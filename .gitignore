@@ -6,3 +6,4 @@ quantdesk.db
 config.json
 server.log
 nohup.out
+.server.pid

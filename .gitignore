@@ -1,0 +1,8 @@
+# runtime artifacts - recreated automatically
+.venv/
+__pycache__/
+*.pyc
+quantdesk.db
+config.json
+server.log
+nohup.out

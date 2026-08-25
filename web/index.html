@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QuantDesk</title>
+<style>
+:root{--bg:#0e1117;--panel:#161b24;--edge:#232b38;--txt:#dbe2ee;--dim:#8a94a6;
+--acc:#4da3ff;--grn:#3ddc84;--red:#ff5c69;--yel:#ffc857}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font:14px/1.45 -apple-system,'Segoe UI',Roboto,sans-serif;padding:18px}
+h1{font-size:20px;margin-bottom:2px} h1 span{color:var(--acc)}
+.sub{color:var(--dim);font-size:12px;margin-bottom:14px}
+.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.tabs button{background:var(--panel);border:1px solid var(--edge);color:var(--dim);
+padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px}
+.tabs button.on{color:#fff;border-color:var(--acc);background:#1a2230}
+.panel{display:none;background:var(--panel);border:1px solid var(--edge);
+border-radius:12px;padding:16px;margin-bottom:14px}
+.panel.on{display:block}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+label{font-size:11px;color:var(--dim);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
+input,select{background:#0d1119;border:1px solid var(--edge);color:var(--txt);
+padding:7px 9px;border-radius:7px;font-size:13px;width:130px}
+input:focus,select:focus{outline:none;border-color:var(--acc)}
+button.go{background:var(--acc);border:none;color:#04121f;font-weight:600;
+padding:8px 18px;border-radius:7px;cursor:pointer}
+button.go:hover{filter:brightness(1.1)}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+th{color:var(--dim);text-align:left;font-weight:500;font-size:11px;
+text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;border-bottom:1px solid var(--edge)}
+td{padding:7px 8px;border-bottom:1px solid #1b2230}
+tr.click{cursor:pointer} tr.click:hover td{background:#1a2230}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.pill.TAKE{background:#12351f;color:var(--grn)} .pill.WATCH{background:#39301a;color:var(--yel)}
+.pill.SKIP,.pill.REJECT{background:#3a1519;color:var(--red)}
+.pill.TRADEABLE{background:#12351f;color:var(--grn)} .pill.WAIT{background:#39301a;color:var(--yel)}
+.grn{color:var(--grn)} .red{color:var(--red)} .yel{color:var(--yel)} .dim{color:var(--dim)}
+.cards{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+.card{background:#10151f;border:1px solid var(--edge);border-radius:10px;padding:12px 14px;min-width:130px}
+.card .v{font-size:19px;font-weight:600;margin-top:2px}
+.card .l{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+#cfgbar{display:flex;gap:14px;align-items:center;background:var(--panel);
+border:1px solid var(--edge);border-radius:12px;padding:10px 16px;margin-bottom:14px;flex-wrap:wrap}
+#cfgbar input{width:90px}
+#msg{position:fixed;bottom:16px;right:16px;background:#1a2230;border:1px solid var(--acc);
+color:var(--txt);padding:10px 16px;border-radius:9px;display:none;z-index:9;font-size:13px}
+.mono{font-family:'SF Mono',Consolas,monospace;font-size:12px}
+h2{font-size:15px;margin-bottom:10px}
+.note{color:var(--dim);font-size:12px;margin-top:8px}
+svg text{fill:var(--dim);font-size:10px}
+</style>
+</head>
+<body>
+<h1>Quant<span>Desk</span></h1>
+<div class="sub">Monte Carlo &middot; probability cones &middot; cointegration &middot; fractional Kelly &mdash; classical math only, suggestions not orders</div>
+
+<div id="cfgbar">
+  <div><label>Bankroll $</label><input id="c_bank" type="number"></div>
+  <div><label>Kelly frac</label><input id="c_kelly" type="number" step="0.05" min="0.05" max="1"></div>
+  <div><label>Max pos %</label><input id="c_maxpos" type="number" step="5" min="5" max="100"></div>
+  <div><label>Min EV %</label><input id="c_minev" type="number" step="0.25"></div>
+  <div><label>Fee %/side</label><input id="c_fee" type="number" step="0.01"></div>
+  <div><label>Slippage %</label><input id="c_slip" type="number" step="0.01"></div>
+  <div><label>MC paths</label><input id="c_paths" type="number" step="1000"></div>
+  <div><label>Horizon d</label><input id="c_hor" type="number" min="2" max="60"></div>
+  <button class="go" onclick="saveCfg()">Save</button>
+</div>
+
+<div class="tabs">
+  <button data-t="screen" class="on">Screener</button>
+  <button data-t="analyze">Analyze / Suggest</button>
+  <button data-t="pairs">Pairs</button>
+  <button data-t="bt">Backtest</button>
+  <button data-t="journal">Journal</button>
+</div>
+
+<div class="panel on" id="p-screen">
+  <div class="row">
+    <div><label>Universe</label><select id="sc_uni">
+      <option value="all">All</option><option value="crypto">Crypto</option>
+      <option value="stock">Stocks/ETF</option><option value="fx">FX</option></select></div>
+    <button class="go" onclick="runScreen()">Run screen</button>
+    <button class="go" style="background:#2a3547;color:var(--txt)" onclick="refreshData()">Refresh data</button>
+  </div>
+  <div id="sc_out"></div>
+  <div class="note">Click a row to load it into Analyze.</div>
+</div>
+
+<div class="panel" id="p-analyze">
+  <div class="row">
+    <div><label>Symbol</label><input id="an_sym" placeholder="BTCUSDT / AAPL / EURUSD=X"></div>
+    <div><label>Side</label><select id="an_side"><option>long</option><option>short</option></select></div>
+    <div><label>Engine</label><select id="an_eng">
+      <option value="student_t">Student-t MC</option><option value="gbm">GBM</option>
+      <option value="bootstrap">Block bootstrap</option></select></div>
+    <div><label>Stop (blank=ATR)</label><input id="an_stop" type="number"></div>
+    <div><label>Target (blank=ATR)</label><input id="an_targ" type="number"></div>
+    <div><label>Horizon d</label><input id="an_hor" type="number" placeholder="default"></div>
+    <button class="go" onclick="runAnalyze()">Analyze</button>
+  </div>
+  <div id="an_out"><div class="note">Run an analysis to see probabilities, EV and Kelly sizing.</div></div>
+</div>
+
+<div class="panel" id="p-pairs">
+  <div class="row">
+    <button class="go" onclick="scanPairs()">Scan watchlist pairs</button>
+    <span class="note" id="pr_status"></span>
+  </div>
+  <div id="pr_out"></div>
+  <div id="pr_detail"></div>
+</div>
+
+<div class="panel" id="p-bt">
+  <div class="row">
+    <div><label>Symbol</label><input id="bt_sym" value="AAPL"></div>
+    <div><label>Breakout lookback</label><input id="bt_lb" type="number" value="20"></div>
+    <div><label>Hold days</label><input id="bt_hold" type="number" value="10"></div>
+    <button class="go" onclick="runBT()">Backtest</button>
+  </div>
+  <div id="bt_out"></div>
+</div>
+
+<div class="panel" id="p-journal">
+  <h2>Open / track trades manually</h2>
+  <div class="row">
+    <div><label>Symbol</label><input id="j_sym"></div>
+    <div><label>Side</label><select id="j_side"><option>long</option><option>short</option></select></div>
+    <div><label>Qty</label><input id="j_qty" type="number" step="any"></div>
+    <div><label>Entry</label><input id="j_entry" type="number" step="any"></div>
+    <div><label>Stop</label><input id="j_stop" type="number" step="any"></div>
+    <div><label>Target</label><input id="j_targ" type="number" step="any"></div>
+    <div><label>P(win)</label><input id="j_pw" type="number" step="any"></div>
+    <div><label>EV%</label><input id="j_ev" type="number" step="any"></div>
+    <button class="go" onclick="journalAdd()">Open</button>
+  </div>
+  <div id="j_out"></div>
+</div>
+
+<div id="msg"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+function toast(t){const m=$('msg');m.textContent=t;m.style.display='block';setTimeout(()=>m.style.display='none',2600);}
+async function api(path,opt){const r=await fetch(path,opt);if(!r.ok){let e;try{e=(await r.json()).detail}catch(_){e=r.statusText}throw new Error(e);}return r.json();}
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+ document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('on'));
+ document.querySelectorAll('.panel').forEach(x=>x.classList.remove('on'));
+ b.classList.add('on');$('p-'+b.dataset.t).classList.add('on');
+});
+
+async function loadCfg(){const c=await api('/api/config');
+ $('c_bank').value=c.bankroll;$('c_kelly').value=c.kelly_fraction;$('c_maxpos').value=c.max_position_frac*100;
+ $('c_minev').value=c.min_ev_pct;$('c_fee').value=c.fee_pct;$('c_slip').value=c.slippage_pct;
+ $('c_paths').value=c.mc_paths;$('c_hor').value=c.horizon_days;}
+async function saveCfg(){await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},
+ body:JSON.stringify({bankroll:+$('c_bank').value,kelly_fraction:+$('c_kelly').value,
+ max_position_frac:+$('c_maxpos').value/100,min_ev_pct:+$('c_minev').value,
+ fee_pct:+$('c_fee').value,slippage_pct:+$('c_slip').value,
+ mc_paths:+$('c_paths').value,horizon_days:+$('c_hor').value})});toast('Config saved');}
+
+async function refreshData(){toast('Refreshing watchlist...');
+ const r=await api('/api/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+ const ok=Object.values(r).filter(x=>x.ok).length;toast(`Refreshed ${ok}/${Object.keys(r).length} symbols`);}
+
+async function runScreen(){$('sc_out').innerHTML='<span class="dim">Screening...</span>';
+ try{const d=await api('/api/screen?universe='+$('sc_uni').value);
+  let h='<table><tr><th>#</th><th>Symbol</th><th>Px</th><th>Trend</th><th>Mom60d</th><th>Vol ann</th><th>RSI</th><th>vs 20d hi</th><th>Brkout</th><th>Score</th></tr>';
+  d.rows.forEach(r=>{h+=`<tr class="click" onclick="loadSym('${r.symbol}')"><td>${r.rank}</td><td><b>${r.symbol}</b></td><td class="mono">${r.px}</td>
+   <td class="${r.trend=='UP'?'grn':'red'}">${r.trend}</td><td>${r.mom60_pct}%</td><td>${r.vol_ann_pct}%</td><td>${r.rsi14}</td>
+   <td>${r.dist_20dhigh_pct}%</td><td>${r.breakout?'<span class=grn>YES</span>':'-'}</td><td><b>${r.score}</b></td></tr>`;});
+  $('sc_out').innerHTML=h+'</table>';}catch(e){$('sc_out').innerHTML=`<span class="red">${e.message}</span>`;}}
+function loadSym(s){document.querySelector('[data-t=analyze]').click();$('an_sym').value=s;}
+
+function fmt(n,d=4){return (+n).toLocaleString(undefined,{maximumFractionDigits:d});}
+async function runAnalyze(){
+ $('an_out').innerHTML='<span class="dim">Simulating '+$('c_paths').value+' paths...</span>';
+ try{const body={symbol:$('an_sym').value.trim(),side:$('an_side').value,engine:$('an_eng').value};
+  if($('an_stop').value)body.stop=+$('an_stop').value;
+  if($('an_targ').value)body.target=+$('an_targ').value;
+  if($('an_hor').value)body.horizon_days=+$('an_hor').value;
+  const d=await api('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  renderAnalyze(d);}catch(e){$('an_out').innerHTML=`<span class="red">${e.message}</span>`;}}
+
+function coneSvg(d){
+ const B=d.cone.bands,W=760,H=300,P={l:56,r:120,t:14,b:26};
+ const n=B.p50.length,lo=Math.min(...B.p5,d.stop),hi=Math.max(...B.p95,d.target);
+ const lo2=Math.min(lo,hi*0.98),hi2=Math.max(hi,lo*1.02);
+ const X=i=>P.l+i*(W-P.l-P.r)/(n-1), Y=v=>P.t+(hi2-v)/(hi2-lo2)*(H-P.t-P.b);
+ let s=`<svg width="${W}" height="${H}">`;
+ [lo2,(lo2+hi2)/2,hi2].forEach(v=>{s+=`<line x1="${P.l}" y1="${Y(v)}" x2="${W-P.r}" y2="${Y(v)}" stroke="#1b2230"/><text x="6" y="${Y(v)+3}">${fmt(v,2)}</text>`;});
+ const band=(a,b,fill)=>{let p='M';B[a].forEach((v,i)=>p+=`${X(i)},${Y(v)} `);for(let i=n-1;i>=0;i--)p+=`${X(i)},${Y(B[b][i])} `;return `<path d="${p}Z" fill="${fill}" stroke="none"/>`;};
+ s+=band('p5','p95','rgba(77,163,255,.10)')+band('p25','p75','rgba(77,163,255,.18)');
+ s+=`<path d="M${B.p50.map((v,i)=>`${X(i)},${Y(v)}`).join(' L')}" fill="none" stroke="#4da3ff" stroke-width="1.6"/>`;
+ const line=(v,c,lbl)=>{if(v>lo2&&v<hi2)s+=`<line x1="${P.l}" y1="${Y(v)}" x2="${W-P.r}" y2="${Y(v)}" stroke="${c}" stroke-dasharray="5 4"/><text x="${W-P.r+6}" y="${Y(v)+3}" fill="${c}">${lbl} ${fmt(v,2)}</text>`;};
+ line(d.entry,'#dbe2ee','entry');line(d.stop,'#ff5c69','stop');line(d.target,'#3ddc84','target');
+ for(let i=0;i<n;i+=Math.ceil(n/8))s+=`<text x="${X(i)-8}" y="${H-8}">d${i}</text>`;
+ return s+'</svg>';}
+
+function renderAnalyze(d){
+ const vc=d.verdict,pf=d.p_target_first,ps=d.p_stop_first;
+ let h=`<div style="display:flex;justify-content:space-between;align-items:center">
+  <h2>${d.symbol} &middot; ${d.side.toUpperCase()} &middot; ${d.engine} &middot; ${d.horizon_days}d horizon (${d.n_paths.toLocaleString()} paths)</h2>
+  <span class="pill ${vc}">${vc}</span></div>
+ <div class="cards">
+  <div class="card"><div class="l">Entry</div><div class="v mono">${fmt(d.entry)}</div></div>
+  <div class="card"><div class="l">Stop</div><div class="v mono red">${fmt(d.stop)}</div></div>
+  <div class="card"><div class="l">Target</div><div class="v mono grn">${fmt(d.target)}</div></div>
+  <div class="card"><div class="l">R:R</div><div class="v">${d.risk_reward}</div></div>
+  <div class="card"><div class="l">P(target first)</div><div class="v grn">${(pf*100).toFixed(1)}%</div></div>
+  <div class="card"><div class="l">P(stop first)</div><div class="v red">${(ps*100).toFixed(1)}%</div></div>
+  <div class="card"><div class="l">P(no touch)</div><div class="v dim">${(d.p_neither*100).toFixed(1)}%</div></div>
+  <div class="card"><div class="l">EV (R)</div><div class="v ${d.ev_R>=0?'grn':'red'}">${d.ev_R}</div></div>
+  <div class="card"><div class="l">Net EV after costs</div><div class="v ${d.ev_net_pct>=0?'grn':'red'}">${d.ev_net_pct}%</div></div>
+ </div>`;
+ const k=d.kelly;
+ h+=k.qty>0?`<div class="cards">
+  <div class="card"><div class="l">Kelly raw</div><div class="v">${(k.kelly_raw*100).toFixed(1)}%</div></div>
+  <div class="card"><div class="l">Kelly used</div><div class="v">${(k.kelly_used_frac*100).toFixed(1)}% bankroll</div></div>
+  <div class="card"><div class="l">Budget</div><div class="v">$${fmt(k.budget,2)}</div></div>
+  <div class="card"><div class="l">Qty</div><div class="v mono">${fmt(k.qty,6)}</div></div>
+  <div class="card"><div class="l">$ at risk</div><div class="v yel">$${fmt(k.risk_amount,2)}</div></div></div>`
+ :`<div class="note red">Kelly refuses this trade: ${k.reason||'negative edge'}</div>`;
+ h+='<h2 style="margin-top:16px">30-day probability cone</h2>'+coneSvg(d);
+ h+=`<div class="note">Vol: EWMA daily ${(d.vol.ewma_daily*100).toFixed(2)}% &middot; HAR ${(d.vol.har_daily*100).toFixed(2)}% |
+ costs round-trip ${d.cost_roundtrip_pct}% | RSI14 ${d.price_stats.rsi14??'-'} | 20d-high dist ${d.price_stats.dist_20d_high_pct}%</div>`;
+ $('an_out').innerHTML=h;}
+
+async function scanPairs(){$('pr_status').textContent='Scanning (fetches + coint tests)...';
+ try{const d=await api('/api/pairs/scan');
+  $('pr_status').textContent=d.pairs.length+' candidate pairs';
+  let h='<table><tr><th>Pair</th><th>EG p</th><th>Johansen</th><th>Half-life</th><th>Z now</th><th>Corr</th><th>Verdict</th><th>Signal</th></tr>';
+  d.pairs.forEach((p,i)=>{h+=`<tr class="click" onclick="pairReport('${p.y}','${p.x}')"><td><b>${p.y} / ${p.x}</b></td>
+   <td class="${p.eg_pvalue<0.05?'grn':p.eg_pvalue<0.10?'yel':'red'}">${p.eg_pvalue}</td>
+   <td>${p.johansen_rank_5pct??'-'}</td><td>${p.half_life_days??'-'}</td>
+   <td class="${Math.abs(p.z_kalman)>=1.8?(p.z_kalman>0?'red':'grn'):''}">${p.z_kalman}</td>
+   <td>${p.log_ret_corr}</td><td><span class="pill ${p.verdict}">${p.verdict}</span></td><td class="mono">${p.signal_hint}</td></tr>`;});
+  $('pr_out').innerHTML=h+'</table>';$('pr_detail').innerHTML='';
+ }catch(e){$('pr_status').innerHTML='<span class=red>'+e.message+'</span>';}}
+async function pairReport(a,b){
+ $('pr_detail').innerHTML='<span class=dim>Running walk-forward backtest...</span>';
+ try{const d=await api(`/api/pairs/report?a=${a}&b=${b}`);const w=d.walk_forward;
+  $('pr_detail').innerHTML=`<h2 style="margin-top:14px">${a}/${b} walk-forward (Kalman spread, z2/0.5, stop 3.5, incl costs)</h2>
+  <div class="cards">
+   <div class="card"><div class="l">Trades</div><div class="v">${w.n_trades}</div></div>
+   <div class="card"><div class="l">Win rate</div><div class="v">${w.win_rate??"-"}%</div></div>
+   <div class="card"><div class="l">Avg/trade</div><div class="v ${w.avg_pnl_pct>=0?'grn':'red'}">${w.avg_pnl_pct}%</div></div>
+   <div class="card"><div class="l">Total ret</div><div class="v ${w.total_return_pct>=0?'grn':'red'}">${w.total_return_pct}%</div></div>
+   <div class="card"><div class="l">Max DD</div><div class="v red">${w.max_drawdown_pct}%</div></div>
+   <div class="card"><div class="l">Cost drag</div><div class="v dim">${w.per_trade_cost_drag_pct}%</div></div></div>`;}
+ catch(e){$('pr_detail').innerHTML=`<span class=red>${e.message}</span>`;}}
+
+async function runBT(){const s=$('bt_sym').value.trim();$('bt_out').innerHTML='<span class=dim>Backtesting...</span>';
+ try{const d=await api(`/api/backtest/breakout/${encodeURIComponent(s)}?lookback=${$('bt_lb').value}&hold=${$('bt_hold').value}`);
+  $('bt_out').innerHTML=`<div class="cards">
+   <div class="card"><div class="l">Strategy</div><div class="v mono" style="font-size:14px">${d.strategy}</div></div>
+   <div class="card"><div class="l">Trades</div><div class="v">${d.n_trades}</div></div>
+   <div class="card"><div class="l">Win rate</div><div class="v">${d.win_rate??"-"}%</div></div>
+   <div class="card"><div class="l">Avg/trade</div><div class="v ${d.avg_pnl_pct>=0?'grn':'red'}">${d.avg_pnl_pct}%</div></div>
+   <div class="card"><div class="l">Total</div><div class="v ${d.total_return_pct>=0?'grn':'red'}">${d.total_return_pct}%</div></div>
+   <div class="card"><div class="l">Max DD</div><div class="v red">${d.max_drawdown_pct}%</div></div>
+   <div class="card"><div class="l">Stopped</div><div class="v yel">${d.stopped_count}</div></div></div>`;}
+ catch(e){$('bt_out').innerHTML=`<span class=red>${e.message}</span>`;}}
+
+async function journalLoad(){const d=await api('/api/journal');
+ const st=d.stats;
+ let h=`<div class="cards">
+  <div class="card"><div class="l">Closed</div><div class="v">${st.closed_trades}</div></div>
+  <div class="card"><div class="l">Win rate</div><div class="v">${st.win_rate}%</div></div>
+  <div class="card"><div class="l">Total P&L</div><div class="v ${st.total_pnl>=0?'grn':'red'}">$${st.total_pnl}</div></div></div>
+ <table><tr><th>ID</th><th>Sym</th><th>Side</th><th>Qty</th><th>Entry</th><th>Status</th><th>Exit/P&L</th><th></th></tr>`;
+ d.trades.forEach(t=>{h+=`<tr><td>${t.id}</td><td><b>${t.symbol}</b></td><td class="${t.side=='long'?'grn':'red'}">${t.side}</td>
+  <td>${t.qty}</td><td class="mono">${t.entry}</td>
+  <td>${t.exit_price?'<span class=dim>closed</span>':'<span class=yel>open</span>'}</td>
+  <td>${t.pnl!=null?`<span class="${t.pnl>=0?'grn':'red'}">$${t.pnl}</span>`:''}</td>
+  <td>${t.exit_price?'':`<button class="go" style="padding:3px 10px" onclick="closeTrade(${t.id})">Close</button>`}</td></tr>`;});
+ $('j_out').innerHTML=h+(d.trades.length?'</table>':'<div class="note">No trades yet.</div>');}
+async function journalAdd(){try{await api('/api/journal',{method:'POST',headers:{'Content-Type':'application/json'},
+ body:JSON.stringify({symbol:$('j_sym').value.trim(),side:$('j_side').value,qty:+$('j_qty').value,
+ entry:+$('j_entry').value,stop:$('j_stop').value?+$('j_stop').value:null,
+ target:$('j_targ').value?+$('j_targ').value:null,p_win:$('j_pw').value?+$('j_pw').value:null,
+ ev_pct:$('j_ev').value?+$('j_ev').value:null})});
+ toast('Trade opened');journalLoad();}catch(e){toast(e.message);}}
+async function closeTrade(id){const px=prompt('Exit price:');
+ if(!px)return;
+ try{await api(`/api/journal/${id}/close`,{method:'POST',headers:{'Content-Type':'application/json'},
+ body:JSON.stringify({exit_price:+px})});toast('Closed');journalLoad();}catch(e){toast(e.message);}}
+
+loadCfg();
+</script>
+</body>
+</html>

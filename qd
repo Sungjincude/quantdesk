@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+# QuantDesk control command:  quantdesk [start|stop|restart|status|update|doctor]
+set -euo pipefail
+QD_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PORT=8600
+URL="http://127.0.0.1:$PORT"
+PID_FILE="$QD_HOME/.server.pid"
+LOG="$QD_HOME/server.log"
+
+healthy() { curl -sf -m 2 "$URL/api/config" >/dev/null 2>&1; }
+open_browser() { xdg-open "$URL" >/dev/null 2>&1 || open "$URL" >/dev/null 2>&1 || true; }
+
+cmd="${1:-start}"
+case "$cmd" in
+
+start)
+    if healthy; then
+        echo "[ok] already running: $URL"; open_browser; exit 0
+    fi
+    if [ ! -x "$QD_HOME/.venv/bin/python" ]; then
+        echo "!! QuantDesk is not installed yet. Run:"
+        echo "   $QD_HOME/install.sh"
+        exit 1
+    fi
+    echo "[*] starting QuantDesk ..."
+    cd "$QD_HOME"
+    nohup "$QD_HOME/.venv/bin/python" -m uvicorn quantdesk.server:app \
+        --host 127.0.0.1 --port $PORT >>"$LOG" 2>&1 &
+    echo $! > "$PID_FILE"
+    ok=0
+    for _ in $(seq 1 30); do healthy && ok=1 && break; sleep 0.5; done
+    if [ "$ok" = 1 ]; then
+        echo "[ok] QuantDesk running: $URL"
+        open_browser
+    else
+        echo "!! failed to start - last log lines:"; tail -n 5 "$LOG"; exit 1
+    fi
+    ;;
+
+stop)
+    if [ -f "$PID_FILE" ] && kill "$(cat "$PID_FILE")" 2>/dev/null; then
+        rm -f "$PID_FILE"; echo "[ok] stopped"
+    elif pkill -f "uvicorn quantdesk.server:app" 2>/dev/null; then
+        rm -f "$PID_FILE"; echo "[ok] stopped"
+    else
+        echo "not running"
+    fi
+    ;;
+
+restart)
+    "$0" stop >/dev/null 2>&1 || true; sleep 1; "$0" start
+    ;;
+
+status)
+    if healthy; then echo "RUNNING   $URL"; else echo "STOPPED"; fi
+    ;;
+
+update)
+    cd "$QD_HOME"
+    echo "[*] pulling latest code ..."
+    git pull --ff-only
+    echo "[*] updating dependencies ..."
+    ./.venv/bin/python -m pip install -q -r requirements.txt
+    echo "[ok] updated - run 'quantdesk restart'"
+    ;;
+
+doctor)
+    echo "== QuantDesk doctor =="
+    echo "home:      $QD_HOME"
+    if [ -x "$QD_HOME/.venv/bin/python" ]; then
+        echo "venv:      ok"
+        "$QD_HOME/.venv/bin/python" - <<'PY'
+import importlib
+for m in ("numpy","pandas","scipy","statsmodels","yfinance","fastapi"):
+    try: importlib.import_module(m); print(f"dep {m}:  ok")
+    except Exception as e: print(f"dep {m}:  MISSING ({e})")
+PY
+    else
+        echo "venv:      MISSING - run $QD_HOME/install.sh"
+    fi
+    if healthy; then echo "server:    running ($URL)"; else echo "server:    stopped"; fi
+    curl -sf -m 5 "https://api.bybit.com/v5/market/time" >/dev/null \
+        && echo "bybit:     reachable" || echo "bybit:     UNREACHABLE"
+    curl -sf -m 5 -o /dev/null "https://stooq.com/q/d/l/?s=aapl.us&i=d" \
+        && echo "stooq:     reachable" || echo "stooq:     UNREACHABLE"
+    ;;
+
+*)
+    echo "QuantDesk - local quantitative trading desk"
+    echo ""
+    echo "usage: quantdesk [start|stop|restart|status|update|doctor]"
+    echo "       quantdesk            (same as start: boots server + opens browser)"
+    ;;
+esac

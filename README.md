@@ -6,44 +6,53 @@ Monte Carlo simulation, probability cones, cointegration, fractional Kelly.
 
 ## Install on any computer
 
-**Linux / macOS**
+### Linux / macOS — one line
 
-    # 1. copy the quantdesk folder to the target machine (USB, zip, git clone)
-    # 2. then:
-    ./install.sh     # creates .venv and installs dependencies (uses uv if available)
-    ./run.sh         # starts server + opens http://127.0.0.1:8600
+    git clone https://github.com/Sungjincude/quantdesk.git && quantdesk/install.sh
 
-**Windows**
+(or if you prefer curl-only: `bash <(curl -sL https://raw.githubusercontent.com/Sungjincude/quantdesk/main/remote-install.sh)`)
 
-    1. install Python from python.org (tick "Add python.exe to PATH")
-    2. copy the quantdesk folder over, then double-click:
-       install.bat   -> one-time dependency install
-       run.bat       -> starts server + opens browser
+Then open any terminal, from ANY directory:
 
-Requires only Python 3.10+ and internet for the first install and market data.
+    quantdesk            # start server + open browser in your app
+    quantdesk status     # is it running?
+    quantdesk stop       # shut it down
+    quantdesk restart
+    quantdesk update     # git pull + dependency refresh
+    quantdesk doctor     # full self-diagnosis
+
+### Windows (PowerShell or CMD) — two lines
+
+    git clone https://github.com/Sungjincude/quantdesk.git
+    powershell -ExecutionPolicy Bypass -File quantdesk\install.ps1
+
+Then open a NEW PowerShell/CMD window, from ANY directory:
+
+    quantdesk            REM start server + open browser
+    quantdesk status
+    quantdesk stop
+    quantdesk doctor
+
+The installer creates a `quantdesk` command (shim in `~/.local/bin` on Linux/macOS,
+`%LOCALAPPDATA%\Programs\quantdesk\bin` on Windows), so you never have to cd into
+the project folder again. It also auto-detects existing installs and skips reinstall.
+
+Requires only Python 3.10+ and internet for first install + market data.
 Everything else (config.json, quantdesk.db) is created automatically on first run.
 
-### Keep machines in sync (optional)
+### Keep machines in sync
 
-The folder is a git-ready repo (.gitignore already excludes .venv/db/config).
-To version it on GitHub:
+`.gitignore` already excludes `.venv/`, `quantdesk.db`, `config.json`.
+Code syncs via git (`quantdesk update`); your journal/config travel by copying
+`quantdesk.db` + `config.json` between machines.
 
-    cd ~/quantdesk
-    git init && git add -A && git commit -m "QuantDesk v0.1"
-    # create an empty repo on github.com, then:
-    git remote add origin git@github.com:YOU/quantdesk.git
-    git push -u origin main
-
-Any other computer then gets it with `git clone` + `./install.sh`.
-Your journal/config travel by copying `quantdesk.db` + `config.json`.
-
-## Launch
+## Launch (manual alternative)
 
     cd ~/quantdesk
     .venv/bin/uvicorn quantdesk.server:app --host 127.0.0.1 --port 8600
 
 Then open **http://127.0.0.1:8600** in your browser.
-(Or just use `./run.sh`, which does this for you.)
+(Or just use the `quantdesk` command, which does this for you.)
 
 ## Modules
 
